@@ -1,0 +1,8 @@
+[package]
+name = "g610-tool"
+version = "0.1.0"
+authors = ["Johannes Seitz <johannes.w.seitz@gmail.com>"]
+
+[dependencies]
+libusb = "0.3"
+
