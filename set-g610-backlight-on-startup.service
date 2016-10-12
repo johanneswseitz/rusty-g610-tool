@@ -1,0 +1,11 @@
+[Unit]
+Description=Set G610 Backlight on startup
+
+[Service]
+User=root
+Type=simple
+ExecStart=/home/joseitz/Projects/rusty-g610-tool/target/debug/g610-tool
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=getty.target

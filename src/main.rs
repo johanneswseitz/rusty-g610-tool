@@ -2,36 +2,62 @@ extern crate libusb;
 use std::time::Duration;
 
 fn main() {
+    // TODO: parse arguments
+
     let context = libusb::Context::new().unwrap();
 
-    for device in context.devices().unwrap().iter() {
-        let device_desc = device.device_descriptor().unwrap();
+    for device in context.devices().unwrap().iter() { // TODO: handle error
+        let device_desc = device.device_descriptor().unwrap(); // TODO: handle error
         if device_desc.vendor_id() == 0x046d && device_desc.product_id() == 0xc333 {
 	    println!("Found G610 Device.");
             match device.open() {
                 Ok(mut handle) => adjust_background_lighting(&mut handle),
                 Err(e) => println!("Error {:?}", e)
+                // TODO: handle error
             }
         }
     }
 }
 
 fn adjust_background_lighting(handle: &mut libusb::DeviceHandle){
-    let interface :u8 = 0x1;
-    handle.detach_kernel_driver(interface);
-    handle.claim_interface(interface);
-    println!("Kernel driver is loaded: {:?}", handle.kernel_driver_active(interface));
+    let interface : u8 = 0x1;
+    let detach_result = handle.detach_kernel_driver(interface);
+    println!("{:?}", detach_result);
 
+    let claim_result = handle.claim_interface(interface);
+    println!("{:?}", claim_result);
+
+    set_backlight_brightness(handle, 1);
+
+    let release_result = handle.release_interface(interface);
+    println!("{:?}", release_result);
+    let attach_result = handle.attach_kernel_driver(interface);
+    println!("{:?}", attach_result);
+}
+
+fn set_backlight_brightness(handle: &mut libusb::DeviceHandle, brightness: usize) {
+    let write_result = handle.write_control(0x21,0x09,0x0211,1, command_for_logo_brightness(0).as_slice(), Duration::from_millis(100));
+    println!("{:?}", write_result);
+    let write_result = handle.write_control(0x21,0x09,0x0211,1, command_for_brightness(brightness).as_slice(), Duration::from_millis(100));
+    println!("{:?}", write_result);
+}
+
+fn command_for_brightness(brightness:usize) -> Vec<u8> {
     let prefix = "11ff0d3b0001";
     let postfix = "0200000000000000000000";
-    let no_backlight = [ prefix, "000000", postfix ].concat();
-    let full_backlight = [ prefix, "ffffff", postfix ].concat();
-    let command = hex_string_to_byte_array(full_backlight);
-    let write_result = handle.write_control(0x21,0x09,0x0211,1, command.as_slice(), Duration::from_millis(100));
-    println!("{:?}", write_result);
-    handle.release_interface(interface);
-    handle.attach_kernel_driver(interface);
-    println!("Kernel driver is loaded: {:?}", handle.kernel_driver_active(interface));
+    match brightness {
+        0 => hex_string_to_byte_array([ prefix, "000000", postfix ].concat()),
+        _ => hex_string_to_byte_array([ prefix, "ffffff", postfix ].concat()),
+    }
+}
+
+fn command_for_logo_brightness(brightness:usize) -> Vec<u8> {
+    let prefix = "11ff0d3b0101";
+    let postfix = "0200000000000000000000";
+    match brightness {
+        0 => hex_string_to_byte_array([ prefix, "000000", postfix ].concat()),
+        _ => hex_string_to_byte_array([ prefix, "ffffff", postfix ].concat()),
+    }
 }
 
 fn hex_string_to_byte_array(hex_string: String) -> Vec<u8>{
