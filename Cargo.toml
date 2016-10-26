@@ -5,4 +5,4 @@ authors = ["Johannes Seitz <johannes.w.seitz@gmail.com>"]
 
 [dependencies]
 libusb = "0.3"
-
+clap = "2.16.2"
