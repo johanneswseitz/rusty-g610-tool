@@ -4,24 +4,12 @@ use std::result::Result;
 use std::time::Duration;
 use std::thread;
 
-struct Times(usize);
-
 fn main() {
     // TODO: parse arguments
 
     let brightness = 1;
-    retry(Times(5), || { set_background_brightness(brightness) });
-}
-
-fn retry<F>(times:Times, closure: F) where F : Fn () -> Result<(), libusb::Error> {
-    for time in 0..times.0 {
-        let result = closure();
-        println!("Try {}: {:?}", time, result);
-        match result {
-            Ok(_) => return,
-            Err(_) => thread::sleep(Duration::from_millis(500))
-        }
-    }
+    let result = set_background_brightness(brightness);
+    print!("{:?}", result);
 }
 
 fn set_background_brightness(brightness:usize) -> Result<(), libusb::Error> {
