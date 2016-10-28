@@ -1,61 +1,67 @@
 extern crate libusb;
+
+use std::result::Result;
 use std::time::Duration;
+use std::thread;
+
+struct Times(usize);
 
 fn main() {
     // TODO: parse arguments
 
-    let context = libusb::Context::new().unwrap();
     let brightness = 1;
+    retry(Times(5), || { set_background_brightness(brightness) });
+}
 
-    let mut found = false;
-    for device in context.devices().unwrap().iter() { // TODO: handle error
-        let device_desc = device.device_descriptor().unwrap(); // TODO: handle error
-        if device_desc.vendor_id() == 0x046d && device_desc.product_id() == 0xc333 {
-	    println!("Found G610 Device.");
-            found = true;
-            match device.open() {
-                Ok(mut handle) => adjust_background_lighting(&mut handle, brightness),
-                Err(e) => println!("Error {:?}", e)
-                // TODO: handle error
-            }
+fn retry<F>(times:Times, closure: F) where F : Fn () -> Result<(), libusb::Error> {
+    for time in 0..times.0 {
+        let result = closure();
+        println!("Try {}: {:?}", time, result);
+        match result {
+            Ok(_) => return,
+            Err(_) => thread::sleep(Duration::from_millis(500))
         }
     }
-    if !found {
-        println!("No G610 Device found.");
+}
+
+fn set_background_brightness(brightness:usize) -> Result<(), libusb::Error> {
+    let context = try!(libusb::Context::new());
+    let devices = try!(context.devices());
+    for device in devices.iter() {
+        let device_desc = try!(device.device_descriptor());
+        if device_desc.vendor_id() == 0x046d && device_desc.product_id() == 0xc333 {
+            let mut handle = try!(device.open());
+            return adjust_background_lighting(&mut handle, brightness);
+        }
     }
+    return Err(libusb::Error::NoDevice);
 }
 
-fn adjust_background_lighting(handle: &mut libusb::DeviceHandle, brightness: usize) {
+fn adjust_background_lighting(handle: &mut libusb::DeviceHandle, brightness: usize) -> Result<(), libusb::Error> {
     let interface : u8 = 0x1;
-    let detach_result = handle.detach_kernel_driver(interface);
-    println!("{:?}", detach_result);
+    try!(handle.detach_kernel_driver(interface));
+    try!(handle.claim_interface(interface));
 
-    let claim_result = handle.claim_interface(interface);
-    println!("{:?}", claim_result);
+    try!(set_backlight_brightness(handle, brightness));
 
-    set_backlight_brightness(handle, brightness);
-
-    let release_result = handle.release_interface(interface);
-    println!("{:?}", release_result);
-    let attach_result = handle.attach_kernel_driver(interface);
-    println!("{:?}", attach_result);
+    try!(handle.release_interface(interface));
+    try!(handle.attach_kernel_driver(interface));
+    return Ok(())
 }
 
-fn set_backlight_brightness(handle: &mut libusb::DeviceHandle, brightness: usize) {
-    let write_result = handle.write_control(0x21,0x09,0x0211,1, command_for_logo_brightness(0).as_slice(), Duration::from_millis(100));
-    println!("{:?}", write_result);
-    let write_result = handle.write_control(0x21,0x09,0x0211,1, command_for_brightness(brightness).as_slice(), Duration::from_millis(100));
-    println!("{:?}", write_result);
+fn set_backlight_brightness(handle: &mut libusb::DeviceHandle, brightness: usize) -> Result<(), libusb::Error> {
+    try!(handle.write_control(0x21,0x09,0x0211,1, command_for_brightness(brightness).as_slice(), Duration::from_millis(50)));
+    thread::sleep(Duration::from_millis(100));
+    try!(handle.write_control(0x21,0x09,0x0211,1, command_for_logo_brightness(brightness).as_slice(), Duration::from_millis(50)));
+    return Ok(());
 }
 
 fn command_for_brightness(brightness:usize) -> Vec<u8> {
-    let prefix = "11ff0d3b0001";
-    return generate_command(prefix, brightness);
+    return generate_command("11ff0d3b0001", brightness);
 }
 
 fn command_for_logo_brightness(brightness:usize) -> Vec<u8> {
-    let prefix = "11ff0d3b0101";
-    return generate_command(prefix, brightness);
+    return generate_command("11ff0d3b0101", brightness);
 }
 
 fn generate_command(prefix: &str, brightness:usize) -> Vec<u8> {
